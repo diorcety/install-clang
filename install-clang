@@ -151,14 +151,14 @@ shift
 
 if [ "${use_master}" != "1" ]; then
     # git version to checkout.
-    version_llvm=release_38
-    version_clang=release_38
-    version_libcxx=release_38
-    version_compilerrt=release_38
-    version_libcxxabi=release_38
-    version_lldb=release_38
-    version_lld=release_38
-    version_extra=release_38
+    version_llvm=release_39
+    version_clang=release_39
+    version_libcxx=release_39
+    version_compilerrt=release_39
+    version_libcxxabi=release_39
+    version_lldb=release_39
+    version_lld=release_39
+    version_extra=release_39
 
 #    cherrypick="projects/libcxx 0c6d1a88 e515bbda f2e8c0454"  # Fix linking against in-tree libc++abi.
 #    cherrypick="$cherrypick;/ 168d0c143"  # Correctly add libc++abi to project list.
@@ -205,7 +205,7 @@ unset CFLAGS
 unset CXXFLAGS
 unset CPPFLAGS
 unset LDFLAGS
-unset LD_LIBRARY_PATH
+# unset LD_LIBRARY_PATH
 unset DYLD_LIBRARY_PATH
 
 # Built libraries with RTTI.
