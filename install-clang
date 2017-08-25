@@ -23,7 +23,7 @@ if [ "${OS}" == "Linux" ]; then
     triple=""
     soext="so"
     somask="so.%s"
-    addl_ldflags="-ldl"
+    addl_ldflags=" -ldl"
     addl_cmake=""
 
 elif [ "${OS}" == "FreeBSD" ]; then
@@ -233,7 +233,7 @@ src_lldb="${src}/lldb"
 src_lld="${src}/lld"
 libcxx_include="${prefix}/include/c++/v1"
 libcxx_lib="${prefix}/lib"
-default_includes="${libcxx_include}:/usr/include"
+# default_includes="${libcxx_include}:/usr/include"
 
 mkdir -p "${libcxx_include}" || { \
     echo "cannot create libcxx_include"; \
@@ -250,6 +250,11 @@ function _exec() # {{{2
 function st # {{{2
 {
     eval echo \$\{$1_stage${stage}\}
+}
+
+function actual # {{{2
+{
+    echo $1_stage${stage}
 }
 
 function add_include_path # {{{2
@@ -398,21 +403,24 @@ if [ "${OS}" == "Darwin" ]; then
     CMAKE_stage1="-DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++"
 
 elif [ "${OS}" == "Linux" ] || [ "${OS}" == "FreeBSD" ]; then
-    CMAKE_stage1="-DLIBCXX_LIBCXXABI_WHOLE_ARCHIVE=on -DLIBCXXABI_ENABLE_SHARED=off -DBUILD_SHARED_LIBS=on"
-    CMAKE_stage2=${CMAKE}_stage1
-    CMAKE_stage3=${CMAKE}_stage1
+    # CMAKE_stage1="-DLIBCXX_LIBCXXABI_WHOLE_ARCHIVE=on -DLIBCXXABI_ENABLE_SHARED=off -DBUILD_SHARED_LIBS=on"
+    # CMAKE_stage1="-DLIBCXX_LIBCXXABI_WHOLE_ARCHIVE=on"
+    CMAKE_stage2=${CMAKE_stage1}
 
-    default_includes=$(add_include_path features.h /usr/include)
-    default_includes=$(add_include_path sys/cdefs.h /usr/include)
+    # default_includes=$(add_include_path features.h /usr/include)
+    # default_includes=$(add_include_path sys/cdefs.h /usr/include)
 
 else
     echo "OS ${OS} not supported"
     exit 1
 fi
 
-CMAKE_common="-DBUILD_SHARED_LIBS=on -DLLVM_TARGETS_TO_BUILD=${targets}"
-CMAKE_stage0="${CMAKE_common} ${CMAKE_stage0} -DLLVM_INCLUDE_TOOLS=bootstrap-only  -DLLVM_EXTERNAL_LIBCXX_BUILD=off -DLLVM_EXTERNAL_LIBCXXABI_BUILD=off -DLLVM_EXTERNAL_COMPILER_RT_BUILD=off"
-CMAKE_stage1="${CMAKE_common} ${CMAKE_stage1} -DLLVM_INCLUDE_TOOLS=bootstrap-only -DLLVM_ENABLE_ASSERTIONS=${assertions} -DLLVM_EXTERNAL_LIBCXXABI_BUILD=on"
+# I'm (Luc H.) unable to build with "BUILD_SHARED_LIBS=On" on my systems
+# CMAKE_common="-DBUILD_SHARED_LIBS=on -DLLVM_TARGETS_TO_BUILD=${targets}"
+# CMAKE_common="-DBUILD_SHARED_LIBS=on"
+CMAKE_common=""
+CMAKE_stage0="${CMAKE_common} ${CMAKE_stage0}"
+CMAKE_stage1="${CMAKE_common} ${CMAKE_stage1} -DLLVM_ENABLE_ASSERTIONS=${assertions}"
 CMAKE_stage2="${CMAKE_common} ${CMAKE_stage2} -DLLVM_ENABLE_ASSERTIONS=${assertions}"
 
 #### Configure the stages. {{{1
@@ -425,64 +433,112 @@ CXX_stage0="${cxx}"
 CXXFLAGS_stage0=""
 CMAKE_stage0="${CMAKE_stage0}"
 BUILD_TYPE_stage0=${buildtype}
+INSTALL_PREFIX_stage0="${prefix_stages}-stage0"
 
+other_settings_stage0=(               \
+    "-DCLANG_ENABLE_BOOTSTRAP=On"     \
+    )
 # Stage 1 options. Compile against standard libraries. {{{2
 
 if [ "${have_clang}" == "1" ]; then
     CC_stage1="${cc}"
     CXX_stage1="${cxx}"
 else
-    CC_stage1="${prefix}/bin/clang"
-    CXX_stage1="${prefix}/bin/clang++"
+    CC_stage1="${INSTALL_PREFIX_stage0}/bin/clang"
+    CXX_stage1="${INSTALL_PREFIX_stage0}/bin/clang++"
 fi
 
 CXXFLAGS_stage1=""
 BUILD_TYPE_stage1=${buildtype}
+INSTALL_PREFIX_stage1="${prefix_stages}-stage1"
+other_settings_stage1=(                 \
+    "-DCLANG_ENABLE_BOOTSTRAP=On"       \
+    "-DCLANG_DEFAULT_CXX_STDLIB=libc++" \
+    )
 
 # Stage 2 options. Compile against our own libraries. {{{2
 
-CC_stage2="${prefix}/bin/clang"
-CXX_stage2="${prefix}/bin/clang++"
-CFLAGS_stage2="-stdlib=libc++"
-CXXFLAGS_stage2="-stdlib=libc++"
+CC_stage2="${INSTALL_PREFIX_stage1}/bin/clang"
+CXX_stage2="${INSTALL_PREFIX_stage1}/bin/clang++w"
+# CFLAGS_stage2="-stdlib=libc++"
+# CXXFLAGS_stage2="-stdlib=libc++"
+# LDFLAGS_stage2="-nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s -lgcc"
 CMAKE_stage2="${CMAKE_stage2}"
 BUILD_TYPE_stage2=${buildtype}
+INSTALL_PREFIX_stage2="${prefix}"
 
+# Compile the extra tools only now
+# -> clang-tidy, clangd
+# -> lldb: debugger
+# -> lld: linker
+# -> LLVM_TOOL_PARALLEL_LIBS_BUILD: Whether to build parallel-libs as part of LLVM
+# -> LLVM_USE_INTEL_JITEVENTS: Use Intel JIT API to inform Intel(R) VTune(TM) Amplifier XE 2011 about JIT code
+other_settings_stage2=(                  \
+    "-DCLANG_ENABLE_BOOTSTRAP=On"        \
+    "-DCLANG_DEFAULT_CXX_STDLIB=libc++"  \
+    )
+other_settings_stage2+=("-DLLVM_TOOL_PARALLEL_LIBS_BUILD=ON")
+other_settings_stage2+=("-DLLVM_USE_INTEL_JITEVENTS=ON")
 #### Compile the stages. {{{1
 
 # The compilation of each stage {{{2
 printf "'%s' " "${cmdline[@]}"
 echo ""
 
-echo Changing directory to ${src} ...
+echo "Changing directory to ${src} ..."
 cd "${src}"
+LD_LIBRARY_PATH_save="${LD_LIBRARY_PATH}"
 
 for stage in 0 1 2; do
      if [ "$(st perform)" == "0" ]; then
          continue
      fi
 
+    if [ ${stage} -eq 2 ] ; then
+        [ -f "${INSTALL_PREFIX_stage1}/bin/clang++w" ] && rm "${INSTALL_PREFIX_stage1}/bin/clang++w"
+        cat > "${INSTALL_PREFIX_stage1}/bin/clang++w"  <<-EOF
+#!/bin/bash
+STAGED_PREFIX="${INSTALL_PREFIX_stage1}"
+export LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}:\${STAGED_PREFIX}/lib"
+MYLFLAGS="-nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s -lgcc"
+# Catch the case when we only want to compile; this helps us avoid some warnings:
+if echo "\$@" | egrep "(^-c | -c | -c$)" >/dev/null 2>&1; then
+    MYLFLAGS=""
+fi
+# Use -stdlib=libc++ w/ clang built from source; otherwise use -I/usr/local/include/c++/v1
+"\${STAGED_PREFIX}/bin/clang++" -stdlib=libc++ "\$@" \${MYLFLAGS}
+EOF
+        chmod +x "${INSTALL_PREFIX_stage1}/bin/clang++w"
+    fi
+
      echo ===
      echo === Building LLVM/clang, stage ${stage} ...
      echo ===
 
-     ( _exec cd "${src}" &&
-       _exec mkdir -p "build-stage${stage}" &&
-       _exec cd "build-stage${stage}" &&
-       CC=$(st CC)
-       CXX=$(st CXX)
-       CFLAGS="$(st CFLAGS)"
-       CXXFLAGS="$(st CXXFLAGS)"
-       LDFLAGS="${addl_ldflags}"
-       _exec cmake -DCMAKE_BUILD_TYPE=$(st BUILD_TYPE)
-             -DLLVM_REQUIRES_RTTI=1
-             -DCMAKE_INSTALL_PREFIX=$"{prefix}"
-             -DC_INCLUDE_DIRS="${default_includes}"
-             ${addl_cmake}
-             $(st CMAKE)
-             .. &&
-       _exec make -j ${parallelism} &&
-       _exec make install
+     other_settings_name="$(actual other_settings)"
+     echo "other_settings_name: ${other_settings_name}"
+     eval other_settings=( '"${'${other_settings_name}'[@]}"')
+
+     ( _exec cd "${src}" &&                                               \
+       _exec mkdir -p "build-stage${stage}" &&                            \
+       _exec cd "build-stage${stage}" &&                                  \
+       CC="$(st CC)"                                                      \
+       CXX="$(st CXX)"                                                    \
+       CFLAGS="$(st CFLAGS)"                                              \
+       CXXFLAGS="$(st CXXFLAGS)"                                          \
+       LDFLAGS="$(st LDFLAGS)${addl_ldflags}"                             \
+       _exec cmake -DCMAKE_BUILD_TYPE="$(st BUILD_TYPE)"                  \
+             -DLLVM_REQUIRES_RTTI=1                                       \
+             -DCMAKE_CXX_FLAGS="$(st CXXFLAGS)"                           \
+             -DCMAKE_INSTALL_PREFIX="$(st INSTALL_PREFIX)"                \
+             -DC_INCLUDE_DIRS="${default_includes}$(st default_includes)" \
+             "${other_settings[@]}"                                       \
+             ${addl_cmake}                                                \
+             $(st CMAKE)                                                  \
+             .. &&                                                        \
+       _exec make -j ${parallelism} &&                                    \
+       _exec make -j ${parallelism} stage2 &&                             \
+       _exec make install                                                 \
      )
 
     if [ "$?" != "0" ] ; then
@@ -491,6 +547,15 @@ for stage in 0 1 2; do
         echo ===
         exit 1
     fi
+    st_prefix="$(st INSTALL_PREFIX)"
+    # Des fois que ... pour la suite!
+    export LD_LIBRARY_PATH="${LD_LIBRARY_PATH_save}:${st_prefix}/lib"
+
+    echo "Default Config"
+    echo | ${st_prefix}/bin/clang++ -Wp,-v -x c++ - -fsyntax-only
+    echo "Config for stdlibc++"
+    echo | ${st_prefix}/bin/clang++ -stdlib=libstdc++ -Wp,-v -x c++ - -fsyntax-only
+
 done
 
 if [ "${perform_cleanup}" == "1" ]; then
