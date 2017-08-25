@@ -3,6 +3,8 @@
 # TODO:
 #    - Try adding lldb once again.
 
+#### Options {{{1
+
 OS=`uname`
 if [ "$OS" == "Linux" ]; then
     triple=""
@@ -193,13 +195,13 @@ if [ ! -d $prefix ]; then
     fi
 fi
 
-#### Copy all output to log file.
+#### Copy all output to log file. {{{1
 log=install.$$.log
 echo "Recording log in $log ..."
 exec > >(tee $log) # Requires fdescfs mounted to /dev/fd on FreeBSD.
 exec 2>&1
 
-#### Set paths and environment.
+#### Set paths and environment. {{{1
 
 unset CFLAGS
 unset CXXFLAGS
@@ -224,12 +226,12 @@ default_includes=${libcxx_include}:/usr/include
 
 mkdir -p $libcxx_include
 
-function st
+function st # {{{2
 {
     eval echo \$\{$1_stage${stage}\}
 }
 
-function add_include_path
+function add_include_path # {{{2
 {
     include=$1
     search_patch=$2
@@ -246,7 +248,7 @@ function add_include_path
     fi
 }
 
-function apply_patch
+function apply_patch # {{{2
 {
     patch=$1
     base=`basename $patch`
@@ -267,7 +269,7 @@ function apply_patch
     cat $patch | git am -3
 }
 
-#### Clone reposistories.
+#### Clone reposistories. {{{1
 
 export GIT_COMMITTER_EMAIL="`whoami`@localhost"
 export GIT_COMMITTER_NAME="`whoami`"
@@ -389,9 +391,10 @@ CMAKE_stage0="${CMAKE_common} ${CMAKE_stage0} -DLLVM_INCLUDE_TOOLS=bootstrap-onl
 CMAKE_stage1="${CMAKE_common} ${CMAKE_stage1} -DLLVM_INCLUDE_TOOLS=bootstrap-only -DLLVM_ENABLE_ASSERTIONS=${assertions} -DLLVM_EXTERNAL_LIBCXXABI_BUILD=on"
 CMAKE_stage2="${CMAKE_common} ${CMAKE_stage2} -DLLVM_ENABLE_ASSERTIONS=${assertions}"
 
-#### Configure the stages.
+#### Configure the stages. {{{1
+prefix_stages="${src}/install"
 
-# Stage 0 options. Get us a clang.
+# Stage 0 options. Get us a clang. {{{2
 
 CC_stage0="$cc"
 CXX_stage0="$cxx"
@@ -399,7 +402,7 @@ CXXFLAGS_stage0=""
 CMAKE_stage0="${CMAKE_stage0}"
 BUILD_TYPE_stage0=${buildtype}
 
-# Stage 1 options. Compile against standard libraries.
+# Stage 1 options. Compile against standard libraries. {{{2
 
 if [ "${have_clang}" == "1" ]; then
     CC_stage1="$cc"
@@ -412,7 +415,7 @@ fi
 CXXFLAGS_stage1=""
 BUILD_TYPE_stage1=${buildtype}
 
-# Stage 2 options. Compile against our own libraries.
+# Stage 2 options. Compile against our own libraries. {{{2
 
 CC_stage2=$prefix/bin/clang
 CXX_stage2=$prefix/bin/clang++
@@ -421,7 +424,9 @@ CXXFLAGS_stage2="-stdlib=libc++"
 CMAKE_stage2="${CMAKE_stage2}"
 BUILD_TYPE_stage2=${buildtype}
 
-#### Compile the stages.
+#### Compile the stages. {{{1
+
+# The compilation of each stage {{{2
 
 echo Changing directory to $src ...
 cd $src
@@ -470,3 +475,6 @@ fi
 echo "===="
 echo "==== Complete log in $log"
 echo "===="
+
+# }}}1
+# vim: set fdm=marker:
