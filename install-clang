@@ -224,16 +224,16 @@ export REQUIRES_RTTI=1
 export PATH=${prefix}/bin:${PATH}
 
 src="${prefix}/src/llvm"
-src_libcxxabi=${src}/projects/libcxxabi
-src_libcxx=${src}/projects/libcxx
-src_compilerrt=${src}/projects/compiler-rt
-src_lldb=${src}/lldb
-src_lld=${src}/lld
-libcxx_include=${prefix}/include/c++/v1
-libcxx_lib=${prefix}/lib
+src_libcxxabi="${src}/projects/libcxxabi"
+src_libcxx="${src}/projects/libcxx"
+src_compilerrt="${src}/projects/compiler-rt"
+src_lldb="${src}/lldb"
+src_lld="${src}/lld"
+libcxx_include="${prefix}/include/c++/v1"
+libcxx_lib="${prefix}/lib"
 default_includes=${libcxx_include}:/usr/include
 
-mkdir -p ${libcxx}_include
+mkdir -p "${libcxx}_include"
 
 function st # {{{2
 {
@@ -242,13 +242,13 @@ function st # {{{2
 
 function add_include_path # {{{2
 {
-    include=$1
-    search_patch=$2
+    include="$1"
+    search_patch="$2"
 
-    path=$(find "${search_patch}" | grep "${include}$" | awk '{print length, $0;}' | sort -n | head -1 | awk '{printf("%s", $2)}')
+    path="$(find "${search_patch}" | grep "${include}$" | awk '{print length, $0;}' | sort -n | head -1 | awk '{printf("%s", $2)}')"
 
     if [ "${path}" != "" ]; then
-        path=$(echo -n ${path} | sed "s#${include}##g")
+        path="$(echo -n ${path} | sed "s#${include}##g")"
         if [ "${default_includes}" = "" ]; then
             echo -n "${path}"
         else
@@ -259,23 +259,23 @@ function add_include_path # {{{2
 
 function apply_patch # {{{2
 {
-    patch=$1
-    base=$(basename ${patch})
+    patch="$1"
+    base="$(basename "${patch}")"
 
-    cwd=$(pwd)
+    cwd="$(pwd)"
 
-    cd ${src}
+    cd "${src}"
 
     if basename "${patch}" | grep -q -- '--'; then
-        dir=$(echo ${base} | awk -v src=${src} -F '--' '{printf("%s/%s/%s", src, $1, $2);}')
+        dir="$(echo "${base}" | awk -v src="${src}" -F '--' '{printf("%s/%s/%s", src, $1, $2);}')"
         if [ ! -d "${dir}" ]; then
             return
         fi
 
-        cd ${dir}
+        cd "${dir}"
     fi
 
-    cat ${patch} | git am -3
+    git am -3 < "${patch}"
 }
 
 #### Clone reposistories. {{{1
@@ -283,8 +283,8 @@ function apply_patch # {{{2
 export GIT_COMMITTER_EMAIL="$(whoami)@localhost"
 export GIT_COMMITTER_NAME="$(whoami)"
 
-d=$(dirname $0)
-patches=$(cd $d; pwd)/patches
+d="$(dirname $0)"
+patches="$(cd "${d}"; pwd)/patches"
 
 if [ "${perform_clone}" == "1" ]; then
 
@@ -292,70 +292,70 @@ if [ "${perform_clone}" == "1" ]; then
     if [ "${mode}" == "install" ]; then
 
         test -d ${src} && echo "${src} already exists, aborting" && exit 1
-        mkdir -p ${src}
+        mkdir -p "${src}"
 
         echo "Changing directory to $(dirname ${src}) for installing  ..."
-        cd $(dirname ${src})
+        cd "$(dirname "${src}")"
 
         git clone https://github.com/llvm-mirror/llvm.git $(basename ${src})
 
-        ( cd ${src}/tools && git clone https://github.com/llvm-mirror/clang.git )
-        ( cd ${src}/projects && git clone https://github.com/llvm-mirror/libcxx )
-        ( cd ${src}/projects && git clone https://github.com/llvm-mirror/compiler-rt )
+        ( cd "${src}/tools" && git clone https://github.com/llvm-mirror/clang.git )
+        ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxx )
+        ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/compiler-rt )
 
-        ( cd ${src} && git checkout -q ${version_llvm} )
-        ( cd ${src}/tools/clang && git checkout -q ${version_clang}  )
-        ( cd ${src_libcxx} && git checkout -q ${version_libcxx} )
-        ( cd ${src_compilerrt} && git checkout -q ${version_compilerrt} )
+        ( cd "${src}" && git checkout -q ${version_llvm} )
+        ( cd "${src}/tools/clang" && git checkout -q ${version_clang}  )
+        ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
+        ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
 
-        ( cd ${src}/projects && git clone https://github.com/llvm-mirror/libcxxabi )
-        ( cd ${src_libcxxabi} && git checkout -q ${version_libcxxabi} )
+        ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxxabi )
+        ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
 
         if [ "${perform_extra_build}" == "1" ]; then
-            ( cd ${src}/tools && git clone https://github.com/llvm-mirror/clang-tools-extra.git extra )
-            ( cd ${src}/tools/extra && git checkout -q ${version_extra} )
+            ( cd "${src}/tools" && git clone https://github.com/llvm-mirror/clang-tools-extra.git extra )
+            ( cd "${src}/tools/extra" && git checkout -q ${version_extra} )
         fi
 
         if [ "${perform_lldb_build}" == "1" ]; then
-            ( cd $(dirname ${src_lldb}) && git clone https://github.com/llvm-mirror/lldb $(basename ${src_lldb}))
-            ( cd ${src_lldb} && git checkout -q ${version_lldb}  )
+            ( cd "$(dirname "${src_lldb}")" && git clone https://github.com/llvm-mirror/lldb "$(basename "${src_lldb}")")
+            ( cd "${src_lldb}" && git checkout -q ${version_lldb}  )
         fi
 
         if [ "${perform_lld_build}" == "1" ]; then
-            ( cd $(dirname ${src_lld}) && git clone https://github.com/llvm-mirror/lld $(basename ${src_lld}))
-            ( cd ${src_lld} && git checkout -q ${version_lld}  )
+            ( cd "$(dirname "${src_lld}")" && git clone https://github.com/llvm-mirror/lld "$(basename "${src_lld}")")
+            ( cd "${src_lld}" && git checkout -q ${version_lld}  )
         fi
 
     else
         echo Changing directory to $(dirname ${src}) for updating ...
         cd $(dirname ${src})
 
-        ( cd ${src} && git pull --rebase )
-        ( cd ${src}/tools/clang && git pull --rebase )
-        ( cd ${src_libcxx} && git pull --rebase )
-        ( cd ${src_compilerrt} && git pull --rebase )
+        ( cd "${src}" && git pull --rebase )
+        ( cd "${src}/tools/clang" && git pull --rebase )
+        ( cd "${src_libcxx}" && git pull --rebase )
+        ( cd "${src_compilerrt}" && git pull --rebase )
 
-        ( cd ${src} && git checkout -q ${version_llvm} )
-        ( cd ${src}/tools/clang && git checkout -q ${version_clang}  )
-        ( cd ${src_libcxx} && git checkout -q ${version_libcxx} )
-        ( cd ${src_compilerrt} && git checkout -q ${version_compilerrt} )
+        ( cd "${src}" && git checkout -q ${version_llvm} )
+        ( cd "${src}/tools/clang" && git checkout -q ${version_clang}  )
+        ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
+        ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
 
-        ( cd ${src_libcxxabi} && git pull --rebase )
-        ( cd ${src_libcxxabi} && git checkout -q ${version_libcxxabi} )
+        ( cd "${src_libcxxabi}" && git pull --rebase )
+        ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
 
         if [ "${perform_extra_build}" == "1" ]; then
-            ( cd ${src}/tools/extra && git pull --rebase )
-            ( cd ${src}/tools/extra && git checkout -q ${version_extra} )
+            ( cd "${src}/tools/extra" && git pull --rebase )
+            ( cd "${src}/tools/extra" && git checkout -q ${version_extra} )
         fi
 
         if [ "${perform_lldb_build}" == "1" ]; then
-            ( cd ${src_lldb} && git pull --rebase )
-            ( cd ${src_lldb} && git checkout -q ${version_lldb}  )
+            ( cd "${src_lldb}" && git pull --rebase )
+            ( cd "${src_lldb}" && git checkout -q ${version_lldb}  )
         fi
 
         if [ "${perform_lld_build}" == "1" ]; then
-            ( cd ${src_lld} && git pull --rebase )
-            ( cd ${src_lld} && git checkout -q ${version_lld}  )
+            ( cd "${src_lld}" && git pull --rebase )
+            ( cd "${src_lld}" && git checkout -q ${version_lld}  )
         fi
     fi
 
@@ -365,7 +365,7 @@ if [ "${perform_clone}" == "1" ]; then
             repo=$(echo ${line} | cut -d ' ' -f 1)
             commits=$(echo ${line} | cut -d ' ' -f 2-)
             echo "Cherry-picking ${commits} in ${repo}"
-            ( cd ${src}/${repo} \
+            ( cd "${src}/${repo}" \
               && git cherry-pick --strategy=recursive -X theirs ${commits} )
         fi
     done
@@ -417,8 +417,8 @@ if [ "${have_clang}" == "1" ]; then
     CC_stage1="${cc}"
     CXX_stage1="${cxx}"
 else
-    CC_stage1=${prefix}/bin/clang
-    CXX_stage1=${prefix}/bin/clang++
+    CC_stage1="${prefix}/bin/clang"
+    CXX_stage1="${prefix}/bin/clang++"
 fi
 
 CXXFLAGS_stage1=""
@@ -426,8 +426,8 @@ BUILD_TYPE_stage1=${buildtype}
 
 # Stage 2 options. Compile against our own libraries. {{{2
 
-CC_stage2=${prefix}/bin/clang
-CXX_stage2=${prefix}/bin/clang++
+CC_stage2="${prefix}/bin/clang"
+CXX_stage2="${prefix}/bin/clang++"
 CFLAGS_stage2="-stdlib=libc++"
 CXXFLAGS_stage2="-stdlib=libc++"
 CMAKE_stage2="${CMAKE_stage2}"
@@ -438,7 +438,7 @@ BUILD_TYPE_stage2=${buildtype}
 # The compilation of each stage {{{2
 
 echo Changing directory to ${src} ...
-cd ${src}
+cd "${src}"
 
 for stage in 0 1 2; do
      if [ "$(st perform)" == "0" ]; then
@@ -449,9 +449,9 @@ for stage in 0 1 2; do
      echo === Building LLVM/clang, stage ${stage} ...
      echo ===
 
-     ( cd ${src} &&\
-       mkdir -p build-stage${stage} && \
-       cd build-stage${stage} && \
+     ( cd "${src}" &&\
+       mkdir -p "build-stage${stage}" && \
+       cd "build-stage${stage}" && \
        CC=$(st CC) \
        CXX=$(st CXX) \
        CFLAGS="$(st CFLAGS)" \
@@ -459,8 +459,8 @@ for stage in 0 1 2; do
        LDFLAGS="${addl_ldflags}" \
        cmake -DCMAKE_BUILD_TYPE=$(st BUILD_TYPE) \
              -DLLVM_REQUIRES_RTTI=1 \
-             -DCMAKE_INSTALL_PREFIX=${prefix} \
-             -DC_INCLUDE_DIRS=${default_includes} \
+             -DCMAKE_INSTALL_PREFIX=$"{prefix}" \
+             -DC_INCLUDE_DIRS="${default_includes}" \
              ${addl_cmake} \
              $(st CMAKE) \
              .. && \
@@ -477,7 +477,7 @@ for stage in 0 1 2; do
 done
 
 if [ "${perform_cleanup}" == "1" ]; then
-    echo Deleting ${src} ...
+    echo "Deleting ${src} ..."
     rm -rf "${src}"
 fi
 
