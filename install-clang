@@ -109,6 +109,7 @@ usage()
     echo "    CXX        path to the C++ compiler for bootstrapping"
 }
 
+cmdline=("$@")
 while getopts "Ab::j:lms:ucCh?" opt ; do
     case "${opt}" in
         c)
@@ -188,6 +189,7 @@ version_lld="${version_lld:-${release}}"
 version_extra="${version_extra:-${release}}"
 
 if [ "${mode}" == "" -o "${prefix}" == "" ]; then
+    echo "Error: Neither mode nor prefix have been specified."
     usage
     exit 1
 fi
@@ -231,9 +233,19 @@ src_lldb="${src}/lldb"
 src_lld="${src}/lld"
 libcxx_include="${prefix}/include/c++/v1"
 libcxx_lib="${prefix}/lib"
-default_includes=${libcxx_include}:/usr/include
+default_includes="${libcxx_include}:/usr/include"
 
-mkdir -p "${libcxx}_include"
+mkdir -p "${libcxx_include}" || { \
+    echo "cannot create libcxx_include"; \
+    exit 1
+}
+
+function _exec() # {{{2
+{
+    printf "'%s' " "$@"
+    printf "\n"
+    "$@"
+}
 
 function st # {{{2
 {
@@ -264,7 +276,7 @@ function apply_patch # {{{2
 
     cwd="$(pwd)"
 
-    cd "${src}"
+    _exec cd "${src}"
 
     if basename "${patch}" | grep -q -- '--'; then
         dir="$(echo "${base}" | awk -v src="${src}" -F '--' '{printf("%s/%s/%s", src, $1, $2);}')"
@@ -272,10 +284,10 @@ function apply_patch # {{{2
             return
         fi
 
-        cd "${dir}"
+        _exec cd "${dir}"
     fi
 
-    git am -3 < "${patch}"
+    _exec git am -3 < "${patch}"
 }
 
 #### Clone reposistories. {{{1
@@ -291,8 +303,11 @@ if [ "${perform_clone}" == "1" ]; then
     # Get/update the repositories.
     if [ "${mode}" == "install" ]; then
 
-        test -d ${src} && echo "${src} already exists, aborting" && exit 1
-        mkdir -p "${src}"
+        test -d "${src}" && echo "${src} already exists, aborting" && exit 1
+        mkdir -p "${src}" || { \
+            echo "cannot create src dir"; \
+            exit 1; \
+        }
 
         echo "Changing directory to $(dirname ${src}) for installing  ..."
         cd "$(dirname "${src}")"
@@ -372,7 +387,7 @@ if [ "${perform_clone}" == "1" ]; then
 
     # Apply any patches we might need.
     for i in ${patches}/*; do
-        apply_patch $i
+        _exec apply_patch $i
     done
 
     echo === Done applying patches
@@ -436,6 +451,8 @@ BUILD_TYPE_stage2=${buildtype}
 #### Compile the stages. {{{1
 
 # The compilation of each stage {{{2
+printf "'%s' " "${cmdline[@]}"
+echo ""
 
 echo Changing directory to ${src} ...
 cd "${src}"
@@ -449,23 +466,23 @@ for stage in 0 1 2; do
      echo === Building LLVM/clang, stage ${stage} ...
      echo ===
 
-     ( cd "${src}" &&\
-       mkdir -p "build-stage${stage}" && \
-       cd "build-stage${stage}" && \
-       CC=$(st CC) \
-       CXX=$(st CXX) \
-       CFLAGS="$(st CFLAGS)" \
-       CXXFLAGS="$(st CXXFLAGS)" \
-       LDFLAGS="${addl_ldflags}" \
-       cmake -DCMAKE_BUILD_TYPE=$(st BUILD_TYPE) \
-             -DLLVM_REQUIRES_RTTI=1 \
-             -DCMAKE_INSTALL_PREFIX=$"{prefix}" \
-             -DC_INCLUDE_DIRS="${default_includes}" \
-             ${addl_cmake} \
-             $(st CMAKE) \
-             .. && \
-       make -j ${parallelism} && \
-       make install \
+     ( _exec cd "${src}" &&
+       _exec mkdir -p "build-stage${stage}" &&
+       _exec cd "build-stage${stage}" &&
+       CC=$(st CC)
+       CXX=$(st CXX)
+       CFLAGS="$(st CFLAGS)"
+       CXXFLAGS="$(st CXXFLAGS)"
+       LDFLAGS="${addl_ldflags}"
+       _exec cmake -DCMAKE_BUILD_TYPE=$(st BUILD_TYPE)
+             -DLLVM_REQUIRES_RTTI=1
+             -DCMAKE_INSTALL_PREFIX=$"{prefix}"
+             -DC_INCLUDE_DIRS="${default_includes}"
+             ${addl_cmake}
+             $(st CMAKE)
+             .. &&
+       _exec make -j ${parallelism} &&
+       _exec make install
      )
 
     if [ "$?" != "0" ] ; then
