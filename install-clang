@@ -6,21 +6,21 @@
 #### Options {{{1
 
 OS=$(uname)
-if [ "$OS" == "Linux" ]; then
+if [ "${OS}" == "Linux" ]; then
     triple=""
     soext="so"
     somask="so.%s"
     addl_ldflags="-ldl"
     addl_cmake=""
 
-elif [ "$OS" == "FreeBSD" ]; then
+elif [ "${OS}" == "FreeBSD" ]; then
     triple=""
     soext="so"
     somask="so.%s"
     addl_ldflags=""
     addl_cmake=""
 
-elif [ "$OS" == "Darwin" ]; then
+elif [ "${OS}" == "Darwin" ]; then
     triple="-apple-"
     soext="dylib"
     somask="%d.dylib"
@@ -28,29 +28,29 @@ elif [ "$OS" == "Darwin" ]; then
     addl_cmake="-DCMAKE_OSX_ARCHITECTURES=x86_64;i386"
 
 else
-    echo "OS $OS not supported by this script."
+    echo "OS ${OS} not supported by this script."
     exit 1
 fi
 
-if [ -n "$CC" ]; then
-    cc=$CC
+if [ -n "${CC}" ]; then
+    cc=${CC}
 elif which clang > /dev/null 2>&1; then
     cc=clang
 elif which gcc > /dev/null 2>&1; then
     cc=gcc
 else
-    echo could not find clang or gcc in '$PATH'
+    echo could not find clang or gcc in '${PATH}'
     exit 1
 fi
 
-if [ -n "$CXX" ]; then
-    cxx=$CXX
+if [ -n "${CXX}" ]; then
+    cxx=${CXX}
 elif which clang++ > /dev/null 2>&1; then
     cxx=clang++
 elif which g++ > /dev/null 2>&1; then
     cxx=g++
 else
-    echo could not find clang++ or g++ in '$PATH'
+    echo could not find clang++ or g++ in '${PATH}'
     exit 1
 fi
 
@@ -97,7 +97,7 @@ usage()
 }
 
 while getopts "Ab::j:lms:ucCh?" opt ; do
-    case "$opt" in
+    case "${opt}" in
         c)
             perform_clone=0
             ;;
@@ -109,21 +109,21 @@ while getopts "Ab::j:lms:ucCh?" opt ; do
             exit 0
             ;;
         j)
-            parallelism=$OPTARG
+            parallelism=${OPTARG}
             ;;
         m)
             use_master=1
             ;;
         s)
-            if [ "$OPTARG" == "0" ]; then
+            if [ "${OPTARG}" == "0" ]; then
                 perform_stage0=1
                 perform_stage1=1
                 perform_stage2=1
-            elif [ "$OPTARG" == "1" ]; then
+            elif [ "${OPTARG}" == "1" ]; then
                 perform_stage0=0
                 perform_stage1=1
                 perform_stage2=1
-            elif [ "$OPTARG" == "2" ]; then
+            elif [ "${OPTARG}" == "2" ]; then
                 perform_stage0=0
                 perform_stage1=0
                 perform_stage2=1
@@ -141,13 +141,13 @@ while getopts "Ab::j:lms:ucCh?" opt ; do
             ;;
 
         b)
-            buildtype=$OPTARG
+            buildtype=${OPTARG}
             ;;
 
     esac
 done
 
-shift $(expr $OPTIND - 1)
+shift $(expr ${OPTIND} - 1)
 prefix=$(echo $1 | sed 's#/$##')
 shift
 
@@ -163,8 +163,8 @@ if [ "${use_master}" != "1" ]; then
     version_extra=release_39
 
 #    cherrypick="projects/libcxx 0c6d1a88 e515bbda f2e8c0454"  # Fix linking against in-tree libc++abi.
-#    cherrypick="$cherrypick;/ 168d0c143"  # Correctly add libc++abi to project list.
-#    cherrypick="$cherrypick;/ d9aaca0ec"  # Fix libc++abi build on FreeBSD.
+#    cherrypick="${cherrypick};/ 168d0c143"  # Correctly add libc++abi to project list.
+#    cherrypick="${cherrypick};/ d9aaca0ec"  # Fix libc++abi build on FreeBSD.
 
 else
     # git version to checkout.
@@ -178,27 +178,27 @@ else
     version_extra=master
 fi
 
-if [ "$mode" == "" -o "$prefix" == "" ]; then
+if [ "${mode}" == "" -o "${prefix}" == "" ]; then
     usage
     exit 1
 fi
 
-if [ ! -d $prefix ]; then
-    if [ "$mode" == "install" ]; then
-        if ! mkdir -p $prefix; then
-            echo failed to create directory $prefix
+if [ ! -d ${prefix} ]; then
+    if [ "${mode}" == "install" ]; then
+        if ! mkdir -p ${prefix}; then
+            echo failed to create directory ${prefix}
             exit 1
         fi
     else
-        echo $prefix does not exist
+        echo ${prefix} does not exist
         exit 1
     fi
 fi
 
 #### Copy all output to log file. {{{1
 log=install.$$.log
-echo "Recording log in $log ..."
-exec > >(tee $log) # Requires fdescfs mounted to /dev/fd on FreeBSD.
+echo "Recording log in ${log} ..."
+exec > >(tee ${log}) # Requires fdescfs mounted to /dev/fd on FreeBSD.
 exec 2>&1
 
 #### Set paths and environment. {{{1
@@ -212,19 +212,19 @@ unset DYLD_LIBRARY_PATH
 
 # Built libraries with RTTI.
 export REQUIRES_RTTI=1
-export PATH=$prefix/bin:$PATH
+export PATH=${prefix}/bin:${PATH}
 
-src="$prefix/src/llvm"
+src="${prefix}/src/llvm"
 src_libcxxabi=${src}/projects/libcxxabi
 src_libcxx=${src}/projects/libcxx
 src_compilerrt=${src}/projects/compiler-rt
 src_lldb=${src}/lldb
 src_lld=${src}/lld
-libcxx_include=$prefix/include/c++/v1
-libcxx_lib=$prefix/lib
+libcxx_include=${prefix}/include/c++/v1
+libcxx_lib=${prefix}/lib
 default_includes=${libcxx_include}:/usr/include
 
-mkdir -p $libcxx_include
+mkdir -p ${libcxx}_include
 
 function st # {{{2
 {
@@ -238,7 +238,7 @@ function add_include_path # {{{2
 
     path=$(find "${search_patch}" | grep "${include}$" | awk '{print length, $0;}' | sort -n | head -1 | awk '{printf("%s", $2)}')
 
-    if [ "$path" != "" ]; then
+    if [ "${path}" != "" ]; then
         path=$(echo -n ${path} | sed "s#${include}##g")
         if [ "${default_includes}" = "" ]; then
             echo -n "${path}"
@@ -251,22 +251,22 @@ function add_include_path # {{{2
 function apply_patch # {{{2
 {
     patch=$1
-    base=$(basename $patch)
+    base=$(basename ${patch})
 
     cwd=$(pwd)
 
-    cd $src
+    cd ${src}
 
-    if basename "$patch" | grep -q -- '--'; then
-        dir=$(echo $base | awk -v src=$src -F '--' '{printf("%s/%s/%s", src, $1, $2);}')
-        if [ ! -d "$dir" ]; then
+    if basename "${patch}" | grep -q -- '--'; then
+        dir=$(echo ${base} | awk -v src=${src} -F '--' '{printf("%s/%s/%s", src, $1, $2);}')
+        if [ ! -d "${dir}" ]; then
             return
         fi
 
-        cd $dir
+        cd ${dir}
     fi
 
-    cat $patch | git am -3
+    cat ${patch} | git am -3
 }
 
 #### Clone reposistories. {{{1
@@ -280,31 +280,31 @@ patches=$(cd $d; pwd)/patches
 if [ "${perform_clone}" == "1" ]; then
 
     # Get/update the repositories.
-    if [ "$mode" == "install" ]; then
+    if [ "${mode}" == "install" ]; then
 
-        test -d $src && echo "$src already exists, aborting" && exit 1
-        mkdir -p $src
+        test -d ${src} && echo "${src} already exists, aborting" && exit 1
+        mkdir -p ${src}
 
-        echo "Changing directory to $(dirname $src) for installing  ..."
-        cd $(dirname $src)
+        echo "Changing directory to $(dirname ${src}) for installing  ..."
+        cd $(dirname ${src})
 
-        git clone https://github.com/llvm-mirror/llvm.git $(basename $src)
+        git clone https://github.com/llvm-mirror/llvm.git $(basename ${src})
 
-        ( cd $src/tools && git clone https://github.com/llvm-mirror/clang.git )
-        ( cd $src/projects && git clone https://github.com/llvm-mirror/libcxx )
-        ( cd $src/projects && git clone https://github.com/llvm-mirror/compiler-rt )
+        ( cd ${src}/tools && git clone https://github.com/llvm-mirror/clang.git )
+        ( cd ${src}/projects && git clone https://github.com/llvm-mirror/libcxx )
+        ( cd ${src}/projects && git clone https://github.com/llvm-mirror/compiler-rt )
 
-        ( cd $src && git checkout -q ${version_llvm} )
-        ( cd $src/tools/clang && git checkout -q ${version_clang}  )
+        ( cd ${src} && git checkout -q ${version_llvm} )
+        ( cd ${src}/tools/clang && git checkout -q ${version_clang}  )
         ( cd ${src_libcxx} && git checkout -q ${version_libcxx} )
         ( cd ${src_compilerrt} && git checkout -q ${version_compilerrt} )
 
-        ( cd $src/projects && git clone https://github.com/llvm-mirror/libcxxabi )
+        ( cd ${src}/projects && git clone https://github.com/llvm-mirror/libcxxabi )
         ( cd ${src_libcxxabi} && git checkout -q ${version_libcxxabi} )
 
         if [ "${perform_extra_build}" == "1" ]; then
-            ( cd $src/tools && git clone https://github.com/llvm-mirror/clang-tools-extra.git extra )
-            ( cd $src/tools/extra && git checkout -q ${version_extra} )
+            ( cd ${src}/tools && git clone https://github.com/llvm-mirror/clang-tools-extra.git extra )
+            ( cd ${src}/tools/extra && git checkout -q ${version_extra} )
         fi
 
         if [ "${perform_lldb_build}" == "1" ]; then
@@ -318,16 +318,16 @@ if [ "${perform_clone}" == "1" ]; then
         fi
 
     else
-        echo Changing directory to $(dirname $src) for updating ...
-        cd $(dirname $src)
+        echo Changing directory to $(dirname ${src}) for updating ...
+        cd $(dirname ${src})
 
         ( cd ${src} && git pull --rebase )
         ( cd ${src}/tools/clang && git pull --rebase )
         ( cd ${src_libcxx} && git pull --rebase )
         ( cd ${src_compilerrt} && git pull --rebase )
 
-        ( cd $src && git checkout -q ${version_llvm} )
-        ( cd $src/tools/clang && git checkout -q ${version_clang}  )
+        ( cd ${src} && git checkout -q ${version_llvm} )
+        ( cd ${src}/tools/clang && git checkout -q ${version_clang}  )
         ( cd ${src_libcxx} && git checkout -q ${version_libcxx} )
         ( cd ${src_compilerrt} && git checkout -q ${version_compilerrt} )
 
@@ -335,8 +335,8 @@ if [ "${perform_clone}" == "1" ]; then
         ( cd ${src_libcxxabi} && git checkout -q ${version_libcxxabi} )
 
         if [ "${perform_extra_build}" == "1" ]; then
-            ( cd $src/tools/extra && git pull --rebase )
-            ( cd $src/tools/extra && git checkout -q ${version_extra} )
+            ( cd ${src}/tools/extra && git pull --rebase )
+            ( cd ${src}/tools/extra && git checkout -q ${version_extra} )
         fi
 
         if [ "${perform_lldb_build}" == "1" ]; then
@@ -352,17 +352,17 @@ if [ "${perform_clone}" == "1" ]; then
 
     # Cherry pick additional commits from master.
     echo "${cherrypick}" | awk -v RS=\; '{print}' | while read line; do
-        if [ "$line" != "" ]; then
-            repo=$(echo $line | cut -d ' ' -f 1)
-            commits=$(echo $line | cut -d ' ' -f 2-)
-            echo "Cherry-picking $commits in $repo"
-            ( cd ${src}/$repo \
-              && git cherry-pick --strategy=recursive -X theirs $commits )
+        if [ "${line}" != "" ]; then
+            repo=$(echo ${line} | cut -d ' ' -f 1)
+            commits=$(echo ${line} | cut -d ' ' -f 2-)
+            echo "Cherry-picking ${commits} in ${repo}"
+            ( cd ${src}/${repo} \
+              && git cherry-pick --strategy=recursive -X theirs ${commits} )
         fi
     done
 
     # Apply any patches we might need.
-    for i in $patches/*; do
+    for i in ${patches}/*; do
         apply_patch $i
     done
 
@@ -370,19 +370,19 @@ if [ "${perform_clone}" == "1" ]; then
 
 fi
 
-if [ "$OS" == "Darwin" ]; then
+if [ "${OS}" == "Darwin" ]; then
     CMAKE_stage1="-DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++"
 
-elif [ "$OS" == "Linux" ] || [ "$OS" == "FreeBSD" ]; then
+elif [ "${OS}" == "Linux" ] || [ "${OS}" == "FreeBSD" ]; then
     CMAKE_stage1="-DLIBCXX_LIBCXXABI_WHOLE_ARCHIVE=on -DLIBCXXABI_ENABLE_SHARED=off -DBUILD_SHARED_LIBS=on"
-    CMAKE_stage2=$CMAKE_stage1
-    CMAKE_stage3=$CMAKE_stage1
+    CMAKE_stage2=${CMAKE}_stage1
+    CMAKE_stage3=${CMAKE}_stage1
 
     default_includes=$(add_include_path features.h /usr/include)
     default_includes=$(add_include_path sys/cdefs.h /usr/include)
 
 else
-    echo "OS $OS not supported"
+    echo "OS ${OS} not supported"
     exit 1
 fi
 
@@ -396,8 +396,8 @@ prefix_stages="${src}/install"
 
 # Stage 0 options. Get us a clang. {{{2
 
-CC_stage0="$cc"
-CXX_stage0="$cxx"
+CC_stage0="${cc}"
+CXX_stage0="${cxx}"
 CXXFLAGS_stage0=""
 CMAKE_stage0="${CMAKE_stage0}"
 BUILD_TYPE_stage0=${buildtype}
@@ -405,11 +405,11 @@ BUILD_TYPE_stage0=${buildtype}
 # Stage 1 options. Compile against standard libraries. {{{2
 
 if [ "${have_clang}" == "1" ]; then
-    CC_stage1="$cc"
-    CXX_stage1="$cxx"
+    CC_stage1="${cc}"
+    CXX_stage1="${cxx}"
 else
-    CC_stage1=$prefix/bin/clang
-    CXX_stage1=$prefix/bin/clang++
+    CC_stage1=${prefix}/bin/clang
+    CXX_stage1=${prefix}/bin/clang++
 fi
 
 CXXFLAGS_stage1=""
@@ -417,8 +417,8 @@ BUILD_TYPE_stage1=${buildtype}
 
 # Stage 2 options. Compile against our own libraries. {{{2
 
-CC_stage2=$prefix/bin/clang
-CXX_stage2=$prefix/bin/clang++
+CC_stage2=${prefix}/bin/clang
+CXX_stage2=${prefix}/bin/clang++
 CFLAGS_stage2="-stdlib=libc++"
 CXXFLAGS_stage2="-stdlib=libc++"
 CMAKE_stage2="${CMAKE_stage2}"
@@ -428,8 +428,8 @@ BUILD_TYPE_stage2=${buildtype}
 
 # The compilation of each stage {{{2
 
-echo Changing directory to $src ...
-cd $src
+echo Changing directory to ${src} ...
+cd ${src}
 
 for stage in 0 1 2; do
      if [ "$(st perform)" == "0" ]; then
@@ -440,7 +440,7 @@ for stage in 0 1 2; do
      echo === Building LLVM/clang, stage ${stage} ...
      echo ===
 
-     ( cd $src &&\
+     ( cd ${src} &&\
        mkdir -p build-stage${stage} && \
        cd build-stage${stage} && \
        CC=$(st CC) \
@@ -455,7 +455,7 @@ for stage in 0 1 2; do
              ${addl_cmake} \
              $(st CMAKE) \
              .. && \
-       make -j $parallelism && \
+       make -j ${parallelism} && \
        make install \
      )
 
@@ -468,12 +468,12 @@ for stage in 0 1 2; do
 done
 
 if [ "${perform_cleanup}" == "1" ]; then
-    echo Deleting $src ...
+    echo Deleting ${src} ...
     rm -rf "${src}"
 fi
 
 echo "===="
-echo "==== Complete log in $log"
+echo "==== Complete log in ${log}"
 echo "===="
 
 # }}}1
