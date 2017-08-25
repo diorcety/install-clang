@@ -226,7 +226,7 @@ unset DYLD_LIBRARY_PATH
 export REQUIRES_RTTI=1
 export PATH=${prefix}/bin:${PATH}
 
-src="${prefix}/src/llvm"
+src="${TMPDIR:-${prefix}}/src/llvm"
 src_libcxxabi="${src}/projects/libcxxabi"
 src_libcxx="${src}/projects/libcxx"
 src_compilerrt="${src}/projects/compiler-rt"
@@ -525,9 +525,9 @@ cd "${src}"
 LD_LIBRARY_PATH_save="${LD_LIBRARY_PATH}"
 
 for stage in 0 1 2; do
-     if [ "$(st perform)" == "0" ]; then
-         continue
-     fi
+    if [ "$(st perform)" == "0" ]; then
+        continue
+    fi
 
     if [ ${stage} -eq 2 ] ; then
         [ -f "${INSTALL_PREFIX_stage1}/bin/clang++w" ] && rm "${INSTALL_PREFIX_stage1}/bin/clang++w"
