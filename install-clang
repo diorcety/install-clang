@@ -407,7 +407,7 @@ if [ "${perform_clone}" == "1" ]; then
     done
 
     # Apply any patches we might need.
-    for i in ${patches}/*; do
+    for i in "$(find "${patches}" -type f)"; do
         _exec apply_patch $i
     done
 

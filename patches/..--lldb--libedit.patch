@@ -1,0 +1,40 @@
+From 0e1e4159a832c0eed210cae14d14346ff4fa489b Mon Sep 17 00:00:00 2001
+From: Luc Hermitte <luc.hermitte@cnes.fr>
+Date: Fri, 25 Aug 2017 10:46:47 +0000
+Subject: [PATCH] Support when libedit isn't in system directories
+
+We ask `pkg-config` where libedit is installed and uses this information to
+update include and link directories in consequence.
+
+It would have been best to use CMake `find_*` functions.
+---
+ CMakeLists.txt | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 32b4580..621ca54 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -15,6 +15,19 @@ endif ()
+ set(LLDB_DISABLE_LIBEDIT ${LLDB_DEFAULT_DISABLE_LIBEDIT} CACHE BOOL "Disables the use of editline.")
+ if (LLDB_DISABLE_LIBEDIT)
+   add_definitions( -DLLDB_DISABLE_LIBEDIT )
++else()
++  if (NOT LIBEDIT_LIB_DIR)
++    execute_process(COMMAND pkg-config --variable=includedir libedit
++      OUTPUT_VARIABLE LIBEDIT_INCLUDE_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
++    execute_process(COMMAND pkg-config --variable=libdir libedit
++      OUTPUT_VARIABLE LIBEDIT_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
++    SET(LIBEDIT_INCLUDE_DIR "${LIBEDIT_INCLUDE_DIR}" CACHE STRING "libedit include directory")
++    SET(LIBEDIT_LIB_DIR "${LIBEDIT_LIB_DIR}"         CACHE STRING "libedit library directory")
++  endif()
++  message(STATUS "LIBEDIT_INCLUDE_DIR: --< ${LIBEDIT_INCLUDE_DIR} >--")
++  message(STATUS "LIBEDIT_LIB_DIR: --< ${LIBEDIT_LIB_DIR} >--")
++  include_directories(${LIBEDIT_INCLUDE_DIR})
++  link_directories(${LIBEDIT_LIB_DIR})
+ endif()
+ 
+ # add_subdirectory(include)
+-- 
+1.8.3.1
+
