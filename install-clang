@@ -11,6 +11,7 @@
 #   - ${version_lldb} : specific version for lldd
 #   - ${version_lld} : specific version for lld
 #   - ${version_extra} : specific version for clang-extra-tools
+# - ${GCCHOME}: path where GCC is installed, when dealing with a
 # non-standard installation.
 #
 # TODO:
@@ -438,6 +439,9 @@ INSTALL_PREFIX_stage0="${prefix_stages}-stage0"
 other_settings_stage0=(               \
     "-DCLANG_ENABLE_BOOTSTRAP=On"     \
     )
+test -n "$GCCHOME" && other_settings_stage0+=( \
+    "-DGCC_INSTALL_PREFIX=${GCCHOME}" \
+    )
 # Stage 1 options. Compile against standard libraries. {{{2
 
 if [ "${have_clang}" == "1" ]; then
@@ -448,12 +452,14 @@ else
     CXX_stage1="${INSTALL_PREFIX_stage0}/bin/clang++"
 fi
 
-CXXFLAGS_stage1=""
 BUILD_TYPE_stage1=${buildtype}
 INSTALL_PREFIX_stage1="${prefix_stages}-stage1"
 other_settings_stage1=(                 \
     "-DCLANG_ENABLE_BOOTSTRAP=On"       \
     "-DCLANG_DEFAULT_CXX_STDLIB=libc++" \
+    )
+test -n "$GCCHOME" && other_settings_stage1+=( \
+    "-DGCC_INSTALL_PREFIX=${GCCHOME}" \
     )
 
 # Stage 2 options. Compile against our own libraries. {{{2
@@ -467,16 +473,20 @@ CMAKE_stage2="${CMAKE_stage2}"
 BUILD_TYPE_stage2=${buildtype}
 INSTALL_PREFIX_stage2="${prefix}"
 
+other_settings_stage2=(                  \
+    "-DCLANG_ENABLE_BOOTSTRAP=On"        \
+    "-DCLANG_DEFAULT_CXX_STDLIB=libc++"  \
+    )
+test -n "$GCCHOME" && other_settings_stage2+=( \
+    "-DGCC_INSTALL_PREFIX=${GCCHOME}" \
+    )
+
 # Compile the extra tools only now
 # -> clang-tidy, clangd
 # -> lldb: debugger
 # -> lld: linker
 # -> LLVM_TOOL_PARALLEL_LIBS_BUILD: Whether to build parallel-libs as part of LLVM
 # -> LLVM_USE_INTEL_JITEVENTS: Use Intel JIT API to inform Intel(R) VTune(TM) Amplifier XE 2011 about JIT code
-other_settings_stage2=(                  \
-    "-DCLANG_ENABLE_BOOTSTRAP=On"        \
-    "-DCLANG_DEFAULT_CXX_STDLIB=libc++"  \
-    )
 other_settings_stage2+=("-DLLVM_TOOL_PARALLEL_LIBS_BUILD=ON")
 other_settings_stage2+=("-DLLVM_USE_INTEL_JITEVENTS=ON")
 #### Compile the stages. {{{1
