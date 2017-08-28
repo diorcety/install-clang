@@ -9,10 +9,12 @@
 #   - ${version_libcxxabi}  : specific version for libcxxabi
 #   - ${version_lldb}       : specific version for lldd
 #   - ${version_lld}        : specific version for lld
+#   - ${version_omp}        : specific version for OpenMP
 #   - ${version_extra}      : specific version for clang-extra-tools
 # - ${GCCHOME}              : path where GCC is installed, when dealing with a
 # - perform_lldb_build      : If 1, attempt to build LLDB.
 # - perform_lld_build       : If 1, attempt to build LLD.
+# - perform_omp_build       : If 1, attempt to build OpenMP.
 # - perform_extra_build     : If 1, attempt to build clang-extra tools.
 # non-standard installation.
 #
@@ -76,6 +78,7 @@ perform_stage1=1                              # If 0, skip the 1st bootstrap sta
 perform_stage2=1                              # If 0, skip the 2nd stage compiling LLVM/clang against libc++ (for testing only).
 perform_lldb_build=${perform_lldb_build:-0}   # If 1, attempt to build LLDB.
 perform_lld_build=${perform_lld_build:-0}     # If 1, attempt to build LLD.
+perform_omp_build=${perform_omp_build:-0}     # If 1, attempt to build OpenMP.
 perform_extra_build=${perform_extra_build:-0} # If 1, attempt to build clang-extra tools.
 perform_cleanup=0                             # If 1, delete all source and build directories.
 assertions=off                                # If "on", enable LLVM assertions.
@@ -234,6 +237,7 @@ src_libcxx="${src}/projects/libcxx"
 src_compilerrt="${src}/projects/compiler-rt"
 src_lldb="${src}/../lldb"
 src_lld="${src}/../lld"
+src_omp="${src}/../openmp"
 libcxx_include="${prefix}/include/c++/v1"
 libcxx_lib="${prefix}/lib"
 # default_includes="${libcxx_include}:/usr/include"
@@ -363,6 +367,11 @@ if [ "${perform_clone}" == "1" ]; then
             ( cd "${src_lld}" && git checkout -q ${version_lld}  )
         fi
 
+        if [ "${perform_omp_build}" == "1" ]; then
+            ( cd "$(dirname "${src_omp}")" && git clone https://github.com/llvm-mirror/openmp "$(basename "${src_omp}")")
+            ( cd "${src_omp}" && git checkout -q ${version_omp}  )
+        fi
+
     else
         echo Changing directory to $(dirname ${src}) for updating ...
         cd $(dirname ${src})
@@ -394,6 +403,11 @@ if [ "${perform_clone}" == "1" ]; then
         if [ "${perform_lld_build}" == "1" ]; then
             ( cd "${src_lld}" && git pull --rebase )
             ( cd "${src_lld}" && git checkout -q ${version_lld}  )
+        fi
+
+        if [ "${perform_omp_build}" == "1" ]; then
+            ( cd "${src_omp}" && git pull --rebase )
+            ( cd "${src_omp}" && git checkout -q ${version_omp}  )
         fi
     fi
 
@@ -502,6 +516,7 @@ test -n "$GCCHOME" && other_settings_stage2+=( \
 # -> clang-tidy, clangd
 # -> lldb: debugger
 # -> lld: linker
+# -> openmp: ...
 # -> LLVM_TOOL_PARALLEL_LIBS_BUILD: Whether to build parallel-libs as part of LLVM
 # -> LLVM_USE_INTEL_JITEVENTS: Use Intel JIT API to inform Intel(R) VTune(TM) Amplifier XE 2011 about JIT code
 other_settings_stage2+=("-DLLVM_TOOL_PARALLEL_LIBS_BUILD=ON")
@@ -513,6 +528,7 @@ other_settings_stage2+=("-DLLVM_USE_INTEL_JITEVENTS=ON")
 project_list=()
 test ${perform_lldb_build}  -eq 1 && project_list+=('lldb')
 test ${perform_lld_build}   -eq 1 && project_list+=('lld')
+test ${perform_omp_build}  -eq 1 && project_list+=('openmp')
 projects="$(_join_by ';' "${project_list[@]}")"
 test "${projects}"          != "" && other_settings_stage2+=("-DLLVM_ENABLE_PROJECTS=${projects}" )
 
