@@ -528,7 +528,6 @@ other_settings_stage2+=("-DLLVM_USE_INTEL_JITEVENTS=ON")
 project_list=()
 test ${perform_lldb_build}  -eq 1 && project_list+=('lldb')
 test ${perform_lld_build}   -eq 1 && project_list+=('lld')
-test ${perform_omp_build}  -eq 1 && project_list+=('openmp')
 projects="$(_join_by ';' "${project_list[@]}")"
 test "${projects}"          != "" && other_settings_stage2+=("-DLLVM_ENABLE_PROJECTS=${projects}" )
 
@@ -562,15 +561,23 @@ fi
 "\${STAGED_PREFIX}/bin/clang++" -stdlib=libc++ "\$@" \${MYLFLAGS}
 EOF
         chmod +x "${INSTALL_PREFIX_stage1}/bin/clang++w"
+        # Register OpenMP project to the list to build.
+        # Unfortunatelly we can't use LLVM_ENABLE_PROJECTS as it only work with
+        # a limited set of projects => we need to make it visible in the right
+        # directory at the right moment.
+        if [ ${perform_omp_build} -eq 1 ] ; then
+            _exec cd "${src}/projects"
+            [ ! -d "openmp" ] && _exec ln -s "${src_omp}" .
+        fi
     fi
 
-     echo ===
-     echo === Building LLVM/clang, stage ${stage} ...
-     echo ===
+    echo ===
+    echo === Building LLVM/clang, stage ${stage} ...
+    echo ===
 
-     other_settings_name="$(actual other_settings)"
-     echo "other_settings_name: ${other_settings_name}"
-     eval other_settings=( '"${'${other_settings_name}'[@]}"')
+    other_settings_name="$(actual other_settings)"
+    echo "other_settings_name: ${other_settings_name}"
+    eval other_settings=( '"${'${other_settings_name}'[@]}"')
 
      ( _exec cd "${src}" &&                                               \
        _exec mkdir -p "build-stage${stage}" &&                            \
