@@ -164,261 +164,261 @@ while getopts "Ab::j:lms:ucCh?" opt ; do
             buildtype=${OPTARG}
             ;;
 
-    esac
-done
+        esac
+    done
 
-shift $(expr ${OPTIND} - 1)
-prefix=$(echo $1 | sed 's#/$##')
-shift
+    shift $(expr ${OPTIND} - 1)
+    prefix=$(echo $1 | sed 's#/$##')
+    shift
 
-if [ "${use_master}" != "1" ]; then
-    # git version to checkout.
-    default_release=release_40
+    if [ "${use_master}" != "1" ]; then
+        # git version to checkout.
+        default_release=release_40
 
-#    cherrypick="projects/libcxx 0c6d1a88 e515bbda f2e8c0454"  # Fix linking against in-tree libc++abi.
-#    cherrypick="${cherrypick};/ 168d0c143"  # Correctly add libc++abi to project list.
-#    cherrypick="${cherrypick};/ d9aaca0ec"  # Fix libc++abi build on FreeBSD.
+        #    cherrypick="projects/libcxx 0c6d1a88 e515bbda f2e8c0454"  # Fix linking against in-tree libc++abi.
+        #    cherrypick="${cherrypick};/ 168d0c143"  # Correctly add libc++abi to project list.
+        #    cherrypick="${cherrypick};/ d9aaca0ec"  # Fix libc++abi build on FreeBSD.
 
-else
-    default_release=master
-fi
-
-release="${release:-${default_release}}"
-
-version_llvm="${version_llvm:-${release}}"
-version_clang="${version_clang:-${release}}"
-version_libcxx="${version_libcxx:-${release}}"
-version_compilerrt="${version_compilerrt:-${release}}"
-version_libcxxabi="${version_libcxxabi:-${release}}"
-version_lldb="${version_lldb:-${release}}"
-version_lld="${version_lld:-${release}}"
-version_extra="${version_extra:-${release}}"
-
-if [ "${mode}" == "" -o "${prefix}" == "" ]; then
-    echo "Error: Neither mode nor prefix have been specified."
-    usage
-    exit 1
-fi
-
-if [ ! -d ${prefix} ]; then
-    if [ "${mode}" == "install" ]; then
-        if ! mkdir -p ${prefix}; then
-            echo failed to create directory ${prefix}
-            exit 1
-        fi
     else
-        echo ${prefix} does not exist
+        default_release=master
+    fi
+
+    release="${release:-${default_release}}"
+
+    version_llvm="${version_llvm:-${release}}"
+    version_clang="${version_clang:-${release}}"
+    version_libcxx="${version_libcxx:-${release}}"
+    version_compilerrt="${version_compilerrt:-${release}}"
+    version_libcxxabi="${version_libcxxabi:-${release}}"
+    version_lldb="${version_lldb:-${release}}"
+    version_lld="${version_lld:-${release}}"
+    version_extra="${version_extra:-${release}}"
+
+    if [ "${mode}" == "" -o "${prefix}" == "" ]; then
+        echo "Error: Neither mode nor prefix have been specified."
+        usage
         exit 1
     fi
-fi
 
-#### Copy all output to log file. {{{1
-log=install.$$.log
-echo "Recording log in ${log} ..."
-exec > >(tee ${log}) # Requires fdescfs mounted to /dev/fd on FreeBSD.
-exec 2>&1
-
-#### Set paths and environment. {{{1
-
-unset CFLAGS
-unset CXXFLAGS
-unset CPPFLAGS
-unset LDFLAGS
-# unset LD_LIBRARY_PATH
-unset DYLD_LIBRARY_PATH
-
-# Built libraries with RTTI.
-export REQUIRES_RTTI=1
-export PATH=${prefix}/bin:${PATH}
-
-src="${TMPDIR:-${prefix}}/src/llvm"
-src_libcxxabi="${src}/projects/libcxxabi"
-src_libcxx="${src}/projects/libcxx"
-src_compilerrt="${src}/projects/compiler-rt"
-src_lldb="${src}/../lldb"
-src_lld="${src}/../lld"
-src_omp="${src}/../openmp"
-libcxx_include="${prefix}/include/c++/v1"
-libcxx_lib="${prefix}/lib"
-# default_includes="${libcxx_include}:/usr/include"
-
-mkdir -p "${libcxx_include}" || { \
-    echo "cannot create libcxx_include"; \
-    exit 1
-}
-
-function _exec() # {{{2
-{
-    printf "'%s' " "$@"
-    printf "\n"
-    "$@"
-}
-
-# _join_by                          {{{2
-# > join_by sep elem1 elem2...
-# http://stackoverflow.com/questions/1527049/join-elements-of-an-array/#17841619
-# This comment and code Copyleft, selectable license under the GPL2.0 or
-# later or CC-SA 3.0 (CreativeCommons Share Alike) or later. (c) 2008.
-# All rights reserved. No warranty of any kind. You have been warned.
-# http://www.gnu.org/licenses/gpl-2.0.txt
-# http://creativecommons.org/licenses/by-sa/3.0/
-function _join_by()
-{
-    local d=$1; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}";
-}
-# ----
-
-function st # {{{2
-{
-    eval echo \$\{$1_stage${stage}\}
-}
-
-function actual # {{{2
-{
-    echo $1_stage${stage}
-}
-
-function add_include_path # {{{2
-{
-    include="$1"
-    search_patch="$2"
-
-    path="$(find "${search_patch}" | grep "${include}$" | awk '{print length, $0;}' | sort -n | head -1 | awk '{printf("%s", $2)}')"
-
-    if [ "${path}" != "" ]; then
-        path="$(echo -n ${path} | sed "s#${include}##g")"
-        if [ "${default_includes}" = "" ]; then
-            echo -n "${path}"
+    if [ ! -d ${prefix} ]; then
+        if [ "${mode}" == "install" ]; then
+            #if ! mkdir -p ${prefix}; then
+            #  echo "failed to create directory ${prefix}"
+            #  exit 1
+            #fi
+            echo "Install from scratch... Prefix is: $prefix"
         else
-            echo -n "${default_includes}:${path}"
-        fi
-    fi
-}
-
-function apply_patch # {{{2
-{
-    patch="$1"
-    base="$(basename "${patch}")"
-
-    cwd="$(pwd)"
-
-    _exec cd "${src}"
-
-    if basename "${patch}" | grep -q -- '--'; then
-        dir="$(echo "${base}" | awk -v src="${src}" -F '--' '{printf("%s/%s/%s", src, $1, $2);}')"
-        if [ ! -d "${dir}" ]; then
-            return
-        fi
-
-        _exec cd "${dir}"
-    fi
-
-    _exec git am -3 < "${patch}"
-}
-
-#### Clone reposistories. {{{1
-
-export GIT_COMMITTER_EMAIL="$(whoami)@localhost"
-export GIT_COMMITTER_NAME="$(whoami)"
-
-d="$(dirname $0)"
-patches="$(cd "${d}"; pwd)/patches"
-
-if [ "${perform_clone}" == "1" ]; then
-
-    # Get/update the repositories.
-    if [ "${mode}" == "install" ]; then
-
-        test -d "${src}" && echo "${src} already exists, aborting" && exit 1
-        mkdir -p "${src}" || { \
-            echo "cannot create src dir"; \
-            exit 1; \
-        }
-
-        echo "Changing directory to $(dirname ${src}) for installing  ..."
-        cd "$(dirname "${src}")"
-
-        git clone https://github.com/llvm-mirror/llvm.git $(basename ${src})
-
-        ( cd "${src}/tools" && git clone https://github.com/llvm-mirror/clang.git )
-        ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxx )
-        ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/compiler-rt )
-
-        ( cd "${src}" && git checkout -q ${version_llvm} )
-        ( cd "${src}/tools/clang" && git checkout -q ${version_clang}  )
-        ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
-        ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
-
-        ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxxabi )
-        ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
-
-        if [ "${perform_extra_build}" == "1" ]; then
-            ( cd "${src}/tools/clang/tools" && git clone https://github.com/llvm-mirror/clang-tools-extra.git extra )
-            ( cd "${src}/tools/clang/tools/extra" && git checkout -q ${version_extra} )
-        fi
-
-        if [ "${perform_lldb_build}" == "1" ]; then
-            ( cd "$(dirname "${src_lldb}")" && git clone https://github.com/llvm-mirror/lldb "$(basename "${src_lldb}")")
-            ( cd "${src_lldb}" && git checkout -q ${version_lldb}  )
-        fi
-
-        if [ "${perform_lld_build}" == "1" ]; then
-            ( cd "$(dirname "${src_lld}")" && git clone https://github.com/llvm-mirror/lld "$(basename "${src_lld}")")
-            ( cd "${src_lld}" && git checkout -q ${version_lld}  )
-        fi
-
-        if [ "${perform_omp_build}" == "1" ]; then
-            ( cd "$(dirname "${src_omp}")" && git clone https://github.com/llvm-mirror/openmp "$(basename "${src_omp}")")
-            ( cd "${src_omp}" && git checkout -q ${version_omp}  )
-        fi
-
-    else
-        echo Changing directory to $(dirname ${src}) for updating ...
-        cd $(dirname ${src})
-
-        ( cd "${src}" && git pull --rebase )
-        ( cd "${src}/tools/clang" && git pull --rebase )
-        ( cd "${src_libcxx}" && git pull --rebase )
-        ( cd "${src_compilerrt}" && git pull --rebase )
-
-        ( cd "${src}" && git checkout -q ${version_llvm} )
-        ( cd "${src}/tools/clang" && git checkout -q ${version_clang}  )
-        ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
-        ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
-
-        ( cd "${src_libcxxabi}" && git pull --rebase )
-        ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
-
-        if [ "${perform_extra_build}" == "1" ]; then
-            # TODO: move somewhere it won't be build automatically
-            ( cd "${src}/tools/clang/tools/extra" && git pull --rebase )
-            ( cd "${src}/tools/clang/tools/extra" && git checkout -q ${version_extra} )
-        fi
-
-        if [ "${perform_lldb_build}" == "1" ]; then
-            ( cd "${src_lldb}" && git pull --rebase )
-            ( cd "${src_lldb}" && git checkout -q ${version_lldb}  )
-        fi
-
-        if [ "${perform_lld_build}" == "1" ]; then
-            ( cd "${src_lld}" && git pull --rebase )
-            ( cd "${src_lld}" && git checkout -q ${version_lld}  )
-        fi
-
-        if [ "${perform_omp_build}" == "1" ]; then
-            ( cd "${src_omp}" && git pull --rebase )
-            ( cd "${src_omp}" && git checkout -q ${version_omp}  )
+            echo "Updating... Prefix is: $prefix"
         fi
     fi
 
-    # Cherry pick additional commits from master.
-    echo "${cherrypick}" | awk -v RS=\; '{print}' | while read line; do
+    #### Copy all output to log file. {{{1
+    log=install.$$.log
+    echo "Recording log in ${log} ..."
+    exec > >(tee ${log}) # Requires fdescfs mounted to /dev/fd on FreeBSD.
+    exec 2>&1
+
+    #### Set paths and environment. {{{1
+
+    unset CFLAGS
+    unset CXXFLAGS
+    unset CPPFLAGS
+    unset LDFLAGS
+    # unset LD_LIBRARY_PATH
+    unset DYLD_LIBRARY_PATH
+
+    # Built libraries with RTTI.
+    export REQUIRES_RTTI=1
+    export PATH=${prefix}/bin:${PATH}
+
+    src="${TMPDIR:-${prefix}}/src/llvm"
+    src_libcxxabi="${src}/projects/libcxxabi"
+    src_libcxx="${src}/projects/libcxx"
+    src_compilerrt="${src}/projects/compiler-rt"
+    src_lldb="${src}/../lldb"
+    src_lld="${src}/../lld"
+    src_omp="${src}/../openmp"
+    libcxx_include="${prefix}/include/c++/v1"
+    libcxx_lib="${prefix}/lib"
+    # default_includes="${libcxx_include}:/usr/include"
+
+    #  mkdir -p "${libcxx_include}" || { \
+        #    echo "cannot create libcxx_include"; \
+        #    exit 1
+    #}
+
+    function _exec() # {{{2
+    {
+        printf "'%s' " "$@"
+        printf "\n"
+        "$@"
+    }
+
+    # _join_by                          {{{2
+    # > join_by sep elem1 elem2...
+    # http://stackoverflow.com/questions/1527049/join-elements-of-an-array/#17841619
+    # This comment and code Copyleft, selectable license under the GPL2.0 or
+    # later or CC-SA 3.0 (CreativeCommons Share Alike) or later. (c) 2008.
+    # All rights reserved. No warranty of any kind. You have been warned.
+    # http://www.gnu.org/licenses/gpl-2.0.txt
+    # http://creativecommons.org/licenses/by-sa/3.0/
+    function _join_by()
+    {
+        local d=$1; shift; echo -n "$1"; shift; printf "%s" "${@/#/$d}";
+    }
+    # ----
+
+    function st # {{{2
+    {
+        eval echo \$\{$1_stage${stage}\}
+    }
+
+    function actual # {{{2
+    {
+        echo $1_stage${stage}
+    }
+
+    function add_include_path # {{{2
+    {
+        include="$1"
+        search_patch="$2"
+
+        path="$(find "${search_patch}" | grep "${include}$" | awk '{print length, $0;}' | sort -n | head -1 | awk '{printf("%s", $2)}')"
+
+        if [ "${path}" != "" ]; then
+            path="$(echo -n ${path} | sed "s#${include}##g")"
+            if [ "${default_includes}" = "" ]; then
+                echo -n "${path}"
+            else
+                echo -n "${default_includes}:${path}"
+            fi
+        fi
+    }
+
+    function apply_patch # {{{2
+    {
+        patch="$1"
+        base="$(basename "${patch}")"
+
+        cwd="$(pwd)"
+
+        _exec cd "${src}"
+
+        if basename "${patch}" | grep -q -- '--'; then
+            dir="$(echo "${base}" | awk -v src="${src}" -F '--' '{printf("%s/%s/%s", src, $1, $2);}')"
+            if [ ! -d "${dir}" ]; then
+                return
+            fi
+
+            _exec cd "${dir}"
+        fi
+
+        _exec git am -3 < "${patch}"
+    }
+
+    #### Clone reposistories. {{{1
+
+    export GIT_COMMITTER_EMAIL="$(whoami)@localhost"
+    export GIT_COMMITTER_NAME="$(whoami)"
+
+    d="$(dirname $0)"
+    patches="$(cd "${d}"; pwd)/patches"
+
+    if [ "${perform_clone}" == "1" ]; then
+
+        # Get/update the repositories.
+        if [ "${mode}" == "install" ]; then
+
+            test -d "${src}" && echo "${src} already exists, aborting" && exit 1
+            mkdir -p "${src}" || { \
+                echo "cannot create src dir"; \
+                exit 1; \
+            }
+
+            echo "Changing directory to $(dirname ${src}) for installing  ..."
+            cd "$(dirname "${src}")"
+
+            git clone https://github.com/llvm-mirror/llvm.git $(basename ${src})
+
+            ( cd "${src}/tools" && git clone https://github.com/llvm-mirror/clang.git )
+            ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxx )
+            ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/compiler-rt )
+
+            ( cd "${src}" && git checkout -q ${version_llvm} )
+            ( cd "${src}/tools/clang" && git checkout -q ${version_clang}  )
+            ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
+            ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
+
+            ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxxabi )
+            ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
+
+            if [ "${perform_extra_build}" == "1" ]; then
+                ( cd "${src}/tools/clang/tools" && git clone https://github.com/llvm-mirror/clang-tools-extra.git extra )
+                ( cd "${src}/tools/clang/tools/extra" && git checkout -q ${version_extra} )
+            fi
+
+            if [ "${perform_lldb_build}" == "1" ]; then
+                ( cd "$(dirname "${src_lldb}")" && git clone https://github.com/llvm-mirror/lldb "$(basename "${src_lldb}")")
+                ( cd "${src_lldb}" && git checkout -q ${version_lldb}  )
+            fi
+
+            if [ "${perform_lld_build}" == "1" ]; then
+                ( cd "$(dirname "${src_lld}")" && git clone https://github.com/llvm-mirror/lld "$(basename "${src_lld}")")
+                ( cd "${src_lld}" && git checkout -q ${version_lld}  )
+            fi
+
+            if [ "${perform_omp_build}" == "1" ]; then
+                ( cd "$(dirname "${src_omp}")" && git clone https://github.com/llvm-mirror/openmp "$(basename "${src_omp}")")
+                ( cd "${src_omp}" && git checkout -q ${version_omp}  )
+            fi
+
+        else
+            echo Changing directory to $(dirname ${src}) for updating ...
+            cd $(dirname ${src})
+
+            ( cd "${src}" && git pull --rebase )
+            ( cd "${src}/tools/clang" && git pull --rebase )
+            ( cd "${src_libcxx}" && git pull --rebase )
+            ( cd "${src_compilerrt}" && git pull --rebase )
+
+            ( cd "${src}" && git checkout -q ${version_llvm} )
+            ( cd "${src}/tools/clang" && git checkout -q ${version_clang}  )
+            ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
+            ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
+
+            ( cd "${src_libcxxabi}" && git pull --rebase )
+            ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
+
+            if [ "${perform_extra_build}" == "1" ]; then
+                # TODO: move somewhere it won't be build automatically
+                ( cd "${src}/tools/clang/tools/extra" && git pull --rebase )
+                ( cd "${src}/tools/clang/tools/extra" && git checkout -q ${version_extra} )
+            fi
+
+            if [ "${perform_lldb_build}" == "1" ]; then
+                ( cd "${src_lldb}" && git pull --rebase )
+                ( cd "${src_lldb}" && git checkout -q ${version_lldb}  )
+            fi
+
+            if [ "${perform_lld_build}" == "1" ]; then
+                ( cd "${src_lld}" && git pull --rebase )
+                ( cd "${src_lld}" && git checkout -q ${version_lld}  )
+            fi
+
+            if [ "${perform_omp_build}" == "1" ]; then
+                ( cd "${src_omp}" && git pull --rebase )
+                ( cd "${src_omp}" && git checkout -q ${version_omp}  )
+            fi
+        fi
+
+        # Cherry pick additional commits from master.
+        echo "${cherrypick}" | awk -v RS=\; '{print}' | while read line; do
         if [ "${line}" != "" ]; then
             repo=$(echo ${line} | cut -d ' ' -f 1)
             commits=$(echo ${line} | cut -d ' ' -f 2-)
             echo "Cherry-picking ${commits} in ${repo}"
             ( cd "${src}/${repo}" \
-              && git cherry-pick --strategy=recursive -X theirs ${commits} )
+                && git cherry-pick --strategy=recursive -X theirs ${commits} )
         fi
     done
 
@@ -549,26 +549,27 @@ for stage in 0 1 2; do
     if [ ${stage} -eq 2 ] ; then
         [ -f "${INSTALL_PREFIX_stage1}/bin/clang++w" ] && rm "${INSTALL_PREFIX_stage1}/bin/clang++w"
         cat > "${INSTALL_PREFIX_stage1}/bin/clang++w"  <<-EOF
-#!/bin/bash
-STAGED_PREFIX="${INSTALL_PREFIX_stage1}"
-export LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}:\${STAGED_PREFIX}/lib"
-MYLFLAGS="-nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s -lgcc"
-# Catch the case when we only want to compile; this helps us avoid some warnings:
-if echo "\$@" | egrep "(^-c | -c | -c$)" >/dev/null 2>&1; then
-    MYLFLAGS=""
-fi
-# Use -stdlib=libc++ w/ clang built from source; otherwise use -I/usr/local/include/c++/v1
-"\${STAGED_PREFIX}/bin/clang++" -stdlib=libc++ "\$@" \${MYLFLAGS}
-EOF
-        chmod +x "${INSTALL_PREFIX_stage1}/bin/clang++w"
-        # Register OpenMP project to the list to build.
-        # Unfortunatelly we can't use LLVM_ENABLE_PROJECTS as it only work with
-        # a limited set of projects => we need to make it visible in the right
-        # directory at the right moment.
-        if [ ${perform_omp_build} -eq 1 ] ; then
-            _exec cd "${src}/projects"
-            [ ! -d "openmp" ] && _exec ln -s "${src_omp}" .
+        #!/bin/bash
+        STAGED_PREFIX="${INSTALL_PREFIX_stage1}"
+        export LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}:\${STAGED_PREFIX}/lib"
+        MYLFLAGS="-nodefaultlibs -lc++ -lc++abi -lm -lc -lgcc_s -lgcc"
+        # Catch the case when we only want to compile; this helps us avoid some warnings:
+        if echo "\$@" | egrep "(^-c | -c | -c$)" >/dev/null 2>&1; then
+            MYLFLAGS=""
         fi
+        # Use -stdlib=libc++ w/ clang built from source; otherwise use -I/usr/local/include/c++/v1
+        "\${STAGED_PREFIX}/bin/clang++" -stdlib=libc++ "\$@" \${MYLFLAGS}
+EOF
+
+chmod +x "${INSTALL_PREFIX_stage1}/bin/clang++w"
+# Register OpenMP project to the list to build.
+# Unfortunatelly we can't use LLVM_ENABLE_PROJECTS as it only work with
+# a limited set of projects => we need to make it visible in the right
+# directory at the right moment.
+if [ ${perform_omp_build} -eq 1 ] ; then
+    _exec cd "${src}/projects"
+    [ ! -d "openmp" ] && _exec ln -s "${src_omp}" .
+fi
     fi
 
     echo ===
@@ -579,27 +580,35 @@ EOF
     echo "other_settings_name: ${other_settings_name}"
     eval other_settings=( '"${'${other_settings_name}'[@]}"')
 
-     ( _exec cd "${src}" &&                                               \
-       _exec mkdir -p "build-stage${stage}" &&                            \
-       _exec cd "build-stage${stage}" &&                                  \
-       CC="$(st CC)"                                                      \
-       CXX="$(st CXX)"                                                    \
-       CFLAGS="$(st CFLAGS)"                                              \
-       CXXFLAGS="$(st CXXFLAGS)"                                          \
-       LDFLAGS="$(st LDFLAGS)${addl_ldflags}"                             \
-       _exec cmake -DCMAKE_BUILD_TYPE="$(st BUILD_TYPE)"                  \
-             -DLLVM_REQUIRES_RTTI=1                                       \
-             -DCMAKE_CXX_FLAGS="$(st CXXFLAGS)"                           \
-             -DCMAKE_INSTALL_PREFIX="$(st INSTALL_PREFIX)"                \
-             -DC_INCLUDE_DIRS="${default_includes}$(st default_includes)" \
-             "${other_settings[@]}"                                       \
-             ${addl_cmake}                                                \
-             $(st CMAKE)                                                  \
-             .. &&                                                        \
-       _exec make -j ${parallelism} &&                                    \
-       _exec make -j ${parallelism} stage2 &&                             \
-       _exec make install                                                 \
-     )
+    if [ ${stage} -eq 1 ] ; then
+        export LD_LIBRARY_PATH="${src}/build-stage1/lib:${LD_LIBRARY_PATH_save}"
+    fi
+
+    #-DENABLE_LIBOMPTARGET="off"
+
+    ( _exec cd "${src}" &&                                           \
+        _exec mkdir -p "build-stage${stage}" &&                      \
+        _exec cd "build-stage${stage}" &&                            \
+        CC="$(st CC)"                                                \
+        CXX="$(st CXX)"                                              \
+        CFLAGS="$(st CFLAGS)"                                        \
+        CXXFLAGS="$(st CXXFLAGS)"                                    \
+        LDFLAGS="$(st LDFLAGS)${addl_ldflags}"                       \
+        _exec cmake                                                  \
+        -DCMAKE_BUILD_TYPE="$(st BUILD_TYPE)"                        \
+        -DLLVM_REQUIRES_RTTI=1                                       \
+        -DLLVM_TARGETS_TO_BUILD="X86"                                \
+        -DCMAKE_CXX_FLAGS="$(st CXXFLAGS)"                           \
+        -DCMAKE_INSTALL_PREFIX="$(st INSTALL_PREFIX)"                \
+        -DC_INCLUDE_DIRS="${default_includes}$(st default_includes)" \
+        "${other_settings[@]}"                                       \
+        ${addl_cmake}                                                \
+        $(st CMAKE)                                                  \
+        .. &&                                                        \
+        _exec make -j ${parallelism} &&                              \
+        _exec make -j ${parallelism} stage2                          \
+        )
+
 
     if [ "$?" != "0" ] ; then
         echo ===
@@ -607,6 +616,17 @@ EOF
         echo ===
         exit 1
     fi
+
+    _exec cd "${src}/build-stage${stage}"
+
+    if [ ${stage} -eq 1 ] ; then
+        export LD_LIBRARY_PATH="${LD_LIBRARY_PATH_save}"
+        _exec make install
+    else
+        #TODO: sudo make install
+        _exec make install
+    fi
+
     st_prefix="$(st INSTALL_PREFIX)"
     # Des fois que ... pour la suite!
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH_save}:${st_prefix}/lib"
