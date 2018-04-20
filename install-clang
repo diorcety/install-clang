@@ -107,7 +107,7 @@ usage()
     echo "    -h|-?      display this help"
     echo "    -j <n>     build with <n> threads in parallel [default: ${parallelism}]"
     echo "    -m         use git/master instead of preconfigured versions"
-    echo "    -s <stage> begin build from <stage> [0, 1, 2]"
+    echo "    -s <stage> begin build from <stage> [0, 1, 2, 3]"
     echo "    -u         update an existing build in <prefix> instead of installing new"
     echo ""
     echo "Environment variables:"
@@ -147,8 +147,12 @@ while getopts "Ab::j:lms:ucCh?" opt ; do
                 perform_stage0=0
                 perform_stage1=0
                 perform_stage2=1
+            elif [ "${OPTARG}" == "3" ]; then
+                perform_stage0=0
+                perform_stage1=0
+                perform_stage2=0
             else
-                echo 'stage parameter must be in [0,1,2].'
+                echo 'stage parameter must be in [0,1,2,3].'
                 exit 1
             fi
             ;;
