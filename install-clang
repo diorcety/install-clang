@@ -73,19 +73,20 @@ else
 fi
 
 use_master=0
-perform_clone=1                               # If 0, skip the cloning (for testing only).
-perform_stage1=1                              # If 0, skip the 1st bootstrap stage (for testing only).
-perform_stage2=1                              # If 0, skip the 2nd stage compiling LLVM/clang against libc++ (for testing only).
-perform_lldb_build=${perform_lldb_build:-0}   # If 1, attempt to build LLDB.
-perform_lld_build=${perform_lld_build:-0}     # If 1, attempt to build LLD.
-perform_omp_build=${perform_omp_build:-0}     # If 1, attempt to build OpenMP.
-perform_extra_build=${perform_extra_build:-0} # If 1, attempt to build clang-extra tools.
-perform_cleanup=0                             # If 1, delete all source and build directories.
-assertions=off                                # If "on", enable LLVM assertions.
-parallelism=4                                 # The value X to pass to make -j X to build in parallel.
-buildtype=Release                             # LLVM/clang build type.
-mode=install                                  # Install from scratch.
-targets=host                                  # LLVM_TARGETS_TO_BUILD ("all" builds them all).
+perform_clone=1                                 # If 0, skip the cloning (for testing only).
+perform_stage1=1                                # If 0, skip the 1st bootstrap stage (for testing only).
+perform_stage2=1                                # If 0, skip the 2nd stage compiling LLVM/clang against libc++ (for testing only).
+perform_libcxx_build=${perform_libcxx_build:-1} # If 1, attempt to build libcxx
+perform_lldb_build=${perform_lldb_build:-0}     # If 1, attempt to build LLDB.
+perform_lld_build=${perform_lld_build:-0}       # If 1, attempt to build LLD.
+perform_omp_build=${perform_omp_build:-0}       # If 1, attempt to build OpenMP.
+perform_extra_build=${perform_extra_build:-0}   # If 1, attempt to build clang-extra tools.
+perform_cleanup=0                               # If 1, delete all source and build directories.
+assertions=off                                  # If "on", enable LLVM assertions.
+parallelism=4                                   # The value X to pass to make -j X to build in parallel.
+buildtype=Release                               # LLVM/clang build type.
+mode=install                                    # Install from scratch.
+targets=host                                    # LLVM_TARGETS_TO_BUILD ("all" builds them all).
 
 if eval ${cxx} --version | grep -q clang; then
     perform_stage0=0
@@ -345,16 +346,20 @@ while getopts "Ab::j:lms:ucCh?" opt ; do
             git clone https://github.com/llvm-mirror/llvm.git $(basename ${src})
 
             ( cd "${src}/tools" && git clone https://github.com/llvm-mirror/clang.git )
-            ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxx )
-            ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/compiler-rt )
+            if [ "${perform_libcxx_build}" == "1" ]; then
+                ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxx )
+                ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/compiler-rt )
+                ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxxabi )
+            fi
 
             ( cd "${src}" && git checkout -q ${version_llvm} )
             ( cd "${src}/tools/clang" && git checkout -q ${version_clang}  )
-            ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
-            ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
 
-            ( cd "${src}/projects" && git clone https://github.com/llvm-mirror/libcxxabi )
-            ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
+            if [ "${perform_libcxx_build}" == "1" ]; then
+                ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
+                ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
+                ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
+            fi
 
             if [ "${perform_extra_build}" == "1" ]; then
                 ( cd "${src}/tools/clang/tools" && git clone https://github.com/llvm-mirror/clang-tools-extra.git extra )
@@ -387,11 +392,14 @@ while getopts "Ab::j:lms:ucCh?" opt ; do
 
             ( cd "${src}" && git checkout -q ${version_llvm} )
             ( cd "${src}/tools/clang" && git checkout -q ${version_clang}  )
-            ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
-            ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
 
-            ( cd "${src_libcxxabi}" && git pull --rebase )
-            ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
+            if [ "${perform_libcxx_build}" == "1" ]; then
+                ( cd "${src_libcxx}" && git checkout -q ${version_libcxx} )
+                ( cd "${src_compilerrt}" && git checkout -q ${version_compilerrt} )
+
+                ( cd "${src_libcxxabi}" && git pull --rebase )
+                ( cd "${src_libcxxabi}" && git checkout -q ${version_libcxxabi} )
+            fi
 
             if [ "${perform_extra_build}" == "1" ]; then
                 # TODO: move somewhere it won't be build automatically
@@ -488,7 +496,11 @@ else
 fi
 
 BUILD_TYPE_stage1=${buildtype}
-INSTALL_PREFIX_stage1="${prefix_stages}-stage1"
+if [ "${perform_libcxx_build}" == "1" ]; then
+  INSTALL_PREFIX_stage1="${prefix_stages}-stage1"
+else
+  INSTALL_PREFIX_stage1="${prefix}"
+fi
 other_settings_stage1=(                 \
     "-DCLANG_ENABLE_BOOTSTRAP=On"       \
     "-DCLANG_DEFAULT_CXX_STDLIB=libc++" \
@@ -516,24 +528,41 @@ test -n "$GCCHOME" && other_settings_stage2+=( \
     "-DGCC_INSTALL_PREFIX=${GCCHOME}" \
     )
 
-# Compile the extra tools only now
-# -> clang-tidy, clangd
-# -> lldb: debugger
-# -> lld: linker
-# -> openmp: ...
-# -> LLVM_TOOL_PARALLEL_LIBS_BUILD: Whether to build parallel-libs as part of LLVM
-# -> LLVM_USE_INTEL_JITEVENTS: Use Intel JIT API to inform Intel(R) VTune(TM) Amplifier XE 2011 about JIT code
-other_settings_stage2+=("-DLLVM_TOOL_PARALLEL_LIBS_BUILD=ON")
-other_settings_stage2+=("-DLLVM_USE_INTEL_JITEVENTS=ON")
-
-# Never generate these tools in the intermediary stages, even if we want
-# them installed in the end.
-
 project_list=()
 test ${perform_lldb_build}  -eq 1 && project_list+=('lldb')
 test ${perform_lld_build}   -eq 1 && project_list+=('lld')
 projects="$(_join_by ';' "${project_list[@]}")"
-test "${projects}"          != "" && other_settings_stage2+=("-DLLVM_ENABLE_PROJECTS=${projects}" )
+if [ "${perform_libcxx_build}" == "1" ]; then
+    # Compile the extra tools only now
+    # -> clang-tidy, clangd
+    # -> lldb: debugger
+    # -> lld: linker
+    # -> openmp: ...
+    # -> LLVM_TOOL_PARALLEL_LIBS_BUILD: Whether to build parallel-libs as part of LLVM
+    # -> LLVM_USE_INTEL_JITEVENTS: Use Intel JIT API to inform Intel(R) VTune(TM) Amplifier XE 2011 about JIT code
+    other_settings_stage2+=("-DLLVM_TOOL_PARALLEL_LIBS_BUILD=ON")
+    other_settings_stage2+=("-DLLVM_USE_INTEL_JITEVENTS=ON")
+
+    # Never generate these tools in the intermediary stages, even if we want
+    # them installed in the end.
+
+    test "${projects}"          != "" && other_settings_stage2+=("-DLLVM_ENABLE_PROJECTS=${projects}" )
+else
+    # Compile the extra tools only now
+    # -> clang-tidy, clangd
+    # -> lldb: debugger
+    # -> lld: linker
+    # -> openmp: ...
+    # -> LLVM_TOOL_PARALLEL_LIBS_BUILD: Whether to build parallel-libs as part of LLVM
+    # -> LLVM_USE_INTEL_JITEVENTS: Use Intel JIT API to inform Intel(R) VTune(TM) Amplifier XE 2011 about JIT code
+    other_settings_stage1+=("-DLLVM_TOOL_PARALLEL_LIBS_BUILD=ON")
+    other_settings_stage1+=("-DLLVM_USE_INTEL_JITEVENTS=ON")
+
+    # Never generate these tools in the intermediary stages, even if we want
+    # them installed in the end.
+
+    test "${projects}"          != "" && other_settings_stage1+=("-DLLVM_ENABLE_PROJECTS=${projects}" )
+fi
 
 #### Compile the stages. {{{1
 
@@ -551,6 +580,9 @@ for stage in 0 1 2; do
     fi
 
     if [ ${stage} -eq 2 ] ; then
+        if [ "${perform_libcxx_build}" == "0" ]; then
+            continue
+        fi
         [ -f "${INSTALL_PREFIX_stage1}/bin/clang++w" ] && rm "${INSTALL_PREFIX_stage1}/bin/clang++w"
         cat > "${INSTALL_PREFIX_stage1}/bin/clang++w"  <<-EOF
         #!/bin/bash
